@@ -74,7 +74,6 @@ class ArtemisMessagingTests {
             doReturn("").whenever(it).exportJMXto
             doReturn(emptyList<CertChainPolicyConfig>()).whenever(it).certificateChainCheckPolicies
             doReturn(5).whenever(it).messageRedeliveryDelaySeconds
-            doReturn(true).whenever(it).useAMQPBridges
         }
         LogHelper.setLevel(PersistentUniquenessProvider::class)
         database = configureDatabase(makeTestDataSourceProperties(), DatabaseConfig(), rigorousMock())
@@ -176,6 +175,7 @@ class ArtemisMessagingTests {
                     null,
                     ServiceAffinityExecutor("ArtemisMessagingTests", 1),
                     database,
+                    networkMapCache,
                     maxMessageSize = maxMessageSize).apply {
                 config.configureWithDevSSLCertificate()
                 messagingClient = this
@@ -184,7 +184,7 @@ class ArtemisMessagingTests {
     }
 
     private fun createMessagingServer(local: Int = serverPort, rpc: Int = rpcPort, maxMessageSize: Int = MAX_MESSAGE_SIZE): ArtemisMessagingServer {
-        return ArtemisMessagingServer(config, local, rpc, networkMapCache, securityManager, maxMessageSize).apply {
+        return ArtemisMessagingServer(config, local, rpc, securityManager, maxMessageSize).apply {
             config.configureWithDevSSLCertificate()
             messagingServer = this
         }

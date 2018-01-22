@@ -148,6 +148,9 @@ UNRELEASED
   However, assuming a clean reset of the artemis data and that the nodes are consistent versions,
   data persisted via the AMQP serializer will be forward compatible.
 
+* Move to a message based control of peer to peer bridge formation to allow for future out of process bridging components.
+  This removes the legacy Artemis bridges completely, so the ``useAMQPBrdges`` configuration property has been removed.
+
 .. _changelog_v1:
 
 Release 1.0

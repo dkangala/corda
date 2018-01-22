@@ -1,14 +1,10 @@
 package net.corda.node.services.messaging
 
-import net.corda.core.crypto.AddressFormatException
 import net.corda.core.crypto.newSecureRandom
-import net.corda.core.identity.CordaX500Name
 import net.corda.core.internal.ThreadBox
 import net.corda.core.internal.div
 import net.corda.core.internal.noneOrSingle
 import net.corda.core.internal.uncheckedCast
-import net.corda.core.node.NodeInfo
-import net.corda.core.node.services.NetworkMapCache.MapChange
 import net.corda.core.serialization.SingletonSerializeAsToken
 import net.corda.core.utilities.NetworkHostAndPort
 import net.corda.core.utilities.contextLogger
@@ -16,7 +12,6 @@ import net.corda.core.utilities.debug
 import net.corda.node.internal.Node
 import net.corda.node.internal.security.Password
 import net.corda.node.internal.security.RPCSecurityManager
-import net.corda.node.services.api.NetworkMapCacheInternal
 import net.corda.node.services.config.NodeConfiguration
 import net.corda.node.services.messaging.NodeLoginModule.Companion.NODE_ROLE
 import net.corda.node.services.messaging.NodeLoginModule.Companion.PEER_ROLE
@@ -26,14 +21,11 @@ import net.corda.nodeapi.ArtemisTcpTransport
 import net.corda.nodeapi.ConnectionDirection
 import net.corda.nodeapi.RPCApi
 import net.corda.nodeapi.VerifierApi
-import net.corda.nodeapi.internal.ArtemisMessagingComponent.ArtemisPeerAddress
 import net.corda.nodeapi.internal.ArtemisMessagingComponent.Companion.INTERNAL_PREFIX
 import net.corda.nodeapi.internal.ArtemisMessagingComponent.Companion.NODE_USER
 import net.corda.nodeapi.internal.ArtemisMessagingComponent.Companion.NOTIFICATIONS_ADDRESS
 import net.corda.nodeapi.internal.ArtemisMessagingComponent.Companion.P2P_PREFIX
-import net.corda.nodeapi.internal.ArtemisMessagingComponent.Companion.PEERS_PREFIX
 import net.corda.nodeapi.internal.ArtemisMessagingComponent.Companion.PEER_USER
-import net.corda.nodeapi.internal.ArtemisMessagingComponent.NodeAddress
 import net.corda.nodeapi.internal.crypto.X509Utilities.CORDA_CLIENT_TLS
 import net.corda.nodeapi.internal.crypto.X509Utilities.CORDA_ROOT_CA
 import net.corda.nodeapi.internal.crypto.loadKeyStore
@@ -56,7 +48,6 @@ import org.apache.activemq.artemis.spi.core.security.ActiveMQJAASSecurityManager
 import org.apache.activemq.artemis.spi.core.security.jaas.CertificateCallback
 import org.apache.activemq.artemis.spi.core.security.jaas.RolePrincipal
 import org.apache.activemq.artemis.spi.core.security.jaas.UserPrincipal
-import rx.Subscription
 import java.io.IOException
 import java.math.BigInteger
 import java.security.KeyStore
@@ -93,7 +84,6 @@ import javax.security.cert.CertificateException
 class ArtemisMessagingServer(private val config: NodeConfiguration,
                              private val p2pPort: Int,
                              val rpcPort: Int?,
-                             val networkMapCache: NetworkMapCacheInternal,
                              val securityManager: RPCSecurityManager,
                              val maxMessageSize: Int) : SingletonSerializeAsToken() {
     companion object {
@@ -106,30 +96,20 @@ class ArtemisMessagingServer(private val config: NodeConfiguration,
     private val mutex = ThreadBox(InnerState())
     private lateinit var activeMQServer: ActiveMQServer
     val serverControl: ActiveMQServerControl get() = activeMQServer.activeMQServerControl
-    private var networkChangeHandle: Subscription? = null
-    private lateinit var bridgeManager: BridgeManager
 
     init {
         config.baseDirectory.requireOnDefaultFileSystem()
     }
 
-    /**
-     * The server will make sure the bridge exists on network map changes, see method [updateBridgesOnNetworkChange]
-     * We assume network map will be updated accordingly when the client node register with the network map.
-     */
     @Throws(IOException::class, KeyStoreException::class)
     fun start() = mutex.locked {
         if (!running) {
             configureAndStartServer()
-            networkChangeHandle = networkMapCache.changed.subscribe { updateBridgesOnNetworkChange(it) }
             running = true
         }
     }
 
     fun stop() = mutex.locked {
-        bridgeManager.close()
-        networkChangeHandle?.unsubscribe()
-        networkChangeHandle = null
         activeMQServer.stop()
         running = false
     }
@@ -145,17 +125,11 @@ class ArtemisMessagingServer(private val config: NodeConfiguration,
             registerActivationFailureListener { exception -> throw exception }
             // Some types of queue might need special preparation on our side, like dialling back or preparing
             // a lazily initialised subsystem.
-            registerPostQueueCreationCallback { deployBridgesFromNewQueue(it.toString()) }
+            registerPostQueueCreationCallback { log.debug { "Queue Created: $it" } }
             registerPostQueueDeletionCallback { address, qName -> log.debug { "Queue deleted: $qName for $address" } }
         }
         // Config driven switch between legacy CORE bridges and the newer AMQP protocol bridges.
-        bridgeManager = if (config.useAMQPBridges) {
-            AMQPBridgeManager(config, NetworkHostAndPort("localhost", p2pPort), maxMessageSize)
-        } else {
-            CoreBridgeManager(config, activeMQServer)
-        }
         activeMQServer.start()
-        bridgeManager.start()
         Node.printBasicNodeInfo("Listening on port", p2pPort.toString())
         if (rpcPort != null) {
             Node.printBasicNodeInfo("RPC service listening on port", rpcPort.toString())
@@ -297,76 +271,8 @@ class ArtemisMessagingServer(private val config: NodeConfiguration,
         return ActiveMQJAASSecurityManager(NodeLoginModule::class.java.name, securityConfig)
     }
 
-    private fun deployBridgesFromNewQueue(queueName: String) {
-        log.debug { "Queue created: $queueName, deploying bridge(s)" }
-        fun deployBridgeToPeer(nodeInfo: NodeInfo) {
-            log.debug("Deploying bridge for $queueName to $nodeInfo")
-            val address = nodeInfo.addresses.first()
-            bridgeManager.deployBridge(queueName, address, nodeInfo.legalIdentitiesAndCerts.map { it.name }.toSet())
-        }
-
-        if (queueName.startsWith(PEERS_PREFIX)) {
-            try {
-                val nodeInfos = networkMapCache.getNodesByOwningKeyIndex(queueName.substring(PEERS_PREFIX.length))
-                if (nodeInfos.isNotEmpty()) {
-                    nodeInfos.forEach { deployBridgeToPeer(it) }
-                } else {
-                    log.error("Queue created for a peer that we don't know from the network map: $queueName")
-                }
-            } catch (e: AddressFormatException) {
-                log.error("Flow violation: Could not parse peer queue name as Base 58: $queueName")
-            }
-        }
-    }
-
-    /**
-     * The bridge will be created automatically when the queues are created, however, this is not the case when the network map restarted.
-     * The queues are restored from the journal, and because the queues are added before we register the callback handler, this method will never get called for existing queues.
-     * This results in message queues up and never get send out. (https://github.com/corda/corda/issues/37)
-     *
-     * We create the bridges indirectly now because the network map is not persisted and there are no ways to obtain host and port information on startup.
-     * TODO : Create the bridge directly from the list of queues on start up when we have a persisted network map service.
-     */
-    private fun updateBridgesOnNetworkChange(change: MapChange) {
-        log.debug { "Updating bridges on network map change: ${change.node}" }
-        fun gatherAddresses(node: NodeInfo): Sequence<ArtemisPeerAddress> {
-            val address = node.addresses.first()
-            return node.legalIdentitiesAndCerts.map { NodeAddress(it.party.owningKey, address) }.asSequence()
-        }
-
-        fun deployBridges(node: NodeInfo) {
-            gatherAddresses(node)
-                    .filter { queueExists(it.queueName) && !bridgeManager.bridgeExists(it.bridgeName) }
-                    .forEach { deployBridge(it, node.legalIdentitiesAndCerts.map { it.name }.toSet()) }
-        }
-
-        when (change) {
-            is MapChange.Added -> {
-                deployBridges(change.node)
-            }
-            is MapChange.Removed -> {
-                bridgeManager.destroyBridges(change.node)
-            }
-            is MapChange.Modified -> {
-                // TODO Figure out what has actually changed and only destroy those bridges that need to be.
-                bridgeManager.destroyBridges(change.previousNode)
-                deployBridges(change.node)
-            }
-        }
-    }
-
-    private fun deployBridge(address: ArtemisPeerAddress, legalNames: Set<CordaX500Name>) {
-        bridgeManager.deployBridge(address.queueName, address.hostAndPort, legalNames)
-    }
-
     private fun createTcpTransport(connectionDirection: ConnectionDirection, host: String, port: Int, enableSSL: Boolean = true) =
             ArtemisTcpTransport.tcpTransport(connectionDirection, NetworkHostAndPort(host, port), config, enableSSL = enableSSL)
-
-    private fun queueExists(queueName: String): Boolean = activeMQServer.queueQuery(SimpleString(queueName)).isExists
-
-    private val ArtemisPeerAddress.bridgeName: String get() = getBridgeName(queueName, hostAndPort)
-
-    private fun getBridgeName(queueName: String, hostAndPort: NetworkHostAndPort): String = "$queueName -> $hostAndPort"
 }
 
 sealed class CertificateChainCheckPolicy {

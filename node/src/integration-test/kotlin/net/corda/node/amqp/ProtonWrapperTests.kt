@@ -6,14 +6,12 @@ import io.netty.channel.EventLoopGroup
 import io.netty.channel.nio.NioEventLoopGroup
 import net.corda.core.identity.CordaX500Name
 import net.corda.core.internal.div
-import net.corda.core.node.services.NetworkMapCache
 import net.corda.core.toFuture
 import net.corda.core.utilities.NetworkHostAndPort
 import net.corda.node.internal.protonwrapper.messages.MessageStatus
 import net.corda.node.internal.protonwrapper.netty.AMQPClient
 import net.corda.node.internal.protonwrapper.netty.AMQPServer
 import net.corda.node.internal.security.RPCSecurityManager
-import net.corda.node.services.api.NetworkMapCacheInternal
 import net.corda.node.services.config.CertChainPolicyConfig
 import net.corda.node.services.config.NodeConfiguration
 import net.corda.node.services.config.configureWithDevSSLCertificate
@@ -29,7 +27,6 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
-import rx.Observable.never
 import kotlin.test.assertEquals
 
 class ProtonWrapperTests {
@@ -228,15 +225,11 @@ class ProtonWrapperTests {
             doReturn("cordacadevpass").whenever(it).keyStorePassword
             doReturn("").whenever(it).exportJMXto
             doReturn(emptyList<CertChainPolicyConfig>()).whenever(it).certificateChainCheckPolicies
-            doReturn(true).whenever(it).useAMQPBridges
         }
         artemisConfig.configureWithDevSSLCertificate()
 
-        val networkMap = rigorousMock<NetworkMapCacheInternal>().also {
-            doReturn(never<NetworkMapCache.MapChange>()).whenever(it).changed
-        }
         val userService = rigorousMock<RPCSecurityManager>()
-        val server = ArtemisMessagingServer(artemisConfig, artemisPort, null, networkMap, userService, MAX_MESSAGE_SIZE)
+        val server = ArtemisMessagingServer(artemisConfig, artemisPort, null, userService, MAX_MESSAGE_SIZE)
         val client = ArtemisMessagingClient(artemisConfig, NetworkHostAndPort("localhost", artemisPort), MAX_MESSAGE_SIZE)
         server.start()
         client.start()
