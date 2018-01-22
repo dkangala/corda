@@ -36,7 +36,6 @@ import net.corda.nodeapi.internal.ArtemisMessagingComponent.Companion.PEER_USER
 import net.corda.nodeapi.internal.ArtemisMessagingComponent.NodeAddress
 import net.corda.nodeapi.internal.crypto.X509Utilities.CORDA_CLIENT_TLS
 import net.corda.nodeapi.internal.crypto.X509Utilities.CORDA_ROOT_CA
-import net.corda.nodeapi.internal.crypto.loadKeyStore
 import net.corda.nodeapi.internal.requireOnDefaultFileSystem
 import org.apache.activemq.artemis.api.core.SimpleString
 import org.apache.activemq.artemis.api.core.management.ActiveMQServerControl
@@ -272,8 +271,8 @@ class ArtemisMessagingServer(private val config: NodeConfiguration,
 
     @Throws(IOException::class, KeyStoreException::class)
     private fun createArtemisSecurityManager(loginListener: LoginListener): ActiveMQJAASSecurityManager {
-        val keyStore = loadKeyStore(config.sslKeystore, config.keyStorePassword)
-        val trustStore = loadKeyStore(config.trustStoreFile, config.trustStorePassword)
+        val keyStore = config.loadSslKeyStore().internal
+        val trustStore = config.loadTrustStore().internal
 
         val defaultCertPolicies = mapOf(
                 PEER_ROLE to CertificateChainCheckPolicy.RootMustMatch,
