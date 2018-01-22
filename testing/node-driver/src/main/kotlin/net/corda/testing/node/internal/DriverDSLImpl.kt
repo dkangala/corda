@@ -237,7 +237,7 @@ class DriverDSLImpl(
         val rootTruststorePath = config.corda.certificatesDirectory / "network-root-truststore.jks"
         loadOrCreateKeyStore(rootTruststorePath, config.corda.trustStorePassword).apply {
             addOrReplaceCertificate(X509Utilities.CORDA_ROOT_CA, rootCert)
-            save(config.corda.trustStoreFile, config.corda.trustStorePassword)
+            save(rootTruststorePath, config.corda.trustStorePassword)
         }
 
         return if (startNodesInProcess) {
