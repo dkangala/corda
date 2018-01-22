@@ -94,7 +94,7 @@ class EvolvabilityTest {
     @Test(expected = NotSerializableException::class)
     fun addAdditionalParam() {
         val sf = testDefaultFactory()
-        val path = EvolvabilityTest::class.java.getResource("EvolvabilityTests.addAdditionalParam")
+        val path = EvolvabilityTest::class.java.getResource("EvolvabilityTest.addAdditionalParam")
         val f = File(path.toURI())
         @Suppress("UNUSED_VARIABLE")
         val A = 1
@@ -133,7 +133,7 @@ class EvolvabilityTest {
 
         data class CC(val b: String, val d: Int)
 
-        val path = EvolvabilityTest::class.java.getResource("EvolvabilityTests.removeParameters")
+        val path = EvolvabilityTest::class.java.getResource("EvolvabilityTest.removeParameters")
         val f = File(path.toURI())
         val sc2 = f.readBytes()
         val deserializedCC = DeserializationInput(sf).deserialize(SerializedBytes<CC>(sc2))

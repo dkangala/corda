@@ -151,7 +151,7 @@ class EnumTest {
 
     @Test(expected = NotSerializableException::class)
     fun changedEnum1() {
-        val path = EnumTest::class.java.getResource("EnumTests.changedEnum1")
+        val path = EnumTest::class.java.getResource("EnumTest.changedEnum1")
         val f = File(path.toURI())
 
         data class C(val a: OldBras)
@@ -171,7 +171,7 @@ class EnumTest {
 
     @Test(expected = NotSerializableException::class)
     fun changedEnum2() {
-        val path = EnumTest::class.java.getResource("EnumTests.changedEnum2")
+        val path = EnumTest::class.java.getResource("EnumTest.changedEnum2")
         val f = File(path.toURI())
 
         data class C(val a: OldBras2)
