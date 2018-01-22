@@ -25,7 +25,9 @@ class ArgsParserTest {
                 noLocalShell = false,
                 sshdServer = false,
                 justGenerateNodeInfo = false,
-                bootstrapRaftCluster = false))
+                bootstrapRaftCluster = false,
+                rootTruststorePassword = null,
+                rootTruststorePath = null))
     }
 
     @Test

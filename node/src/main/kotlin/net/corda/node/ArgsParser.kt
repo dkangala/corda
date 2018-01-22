@@ -1,6 +1,5 @@
 package net.corda.node
 
-import com.typesafe.config.ConfigException
 import joptsimple.OptionParser
 import joptsimple.util.EnumConverter
 import net.corda.core.internal.div
@@ -34,6 +33,10 @@ class ArgsParser {
     private val sshdServerArg = optionParser.accepts("sshd", "Enables SSHD server for node administration.")
     private val noLocalShellArg = optionParser.accepts("no-local-shell", "Do not start the embedded shell locally.")
     private val isRegistrationArg = optionParser.accepts("initial-registration", "Start initial node registration with Corda network to obtain certificate from the permissioning server.")
+    private val rootTruststorePath = optionParser.accepts("root-truststore", "Network root truststore obtained from network operator, use for preventing MITM attack during initial registration process.")
+            .withRequiredArg()
+    private val rootTruststorePassword = optionParser.accepts("root-truststore-password", "Network root truststore password.")
+            .withRequiredArg()
     private val isVersionArg = optionParser.accepts("version", "Print the version and exit")
     private val justGenerateNodeInfoArg = optionParser.accepts("just-generate-node-info",
             "Perform the node start-up task necessary to generate its nodeInfo, save it to disk, then quit")
@@ -56,8 +59,21 @@ class ArgsParser {
         val sshdServer = optionSet.has(sshdServerArg)
         val justGenerateNodeInfo = optionSet.has(justGenerateNodeInfoArg)
         val bootstrapRaftCluster = optionSet.has(bootstrapRaftClusterArg)
-        return CmdLineOptions(baseDirectory, configFile, help, loggingLevel, logToConsole, isRegistration, isVersion,
-                noLocalShell, sshdServer, justGenerateNodeInfo, bootstrapRaftCluster)
+        val rootTruststorePath = optionSet.valueOf(rootTruststorePath)?.let { Paths.get(it).normalize().toAbsolutePath() }
+        val rootTruststorePassword = optionSet.valueOf(rootTruststorePassword)
+        return CmdLineOptions(baseDirectory,
+                configFile,
+                help,
+                loggingLevel,
+                logToConsole,
+                isRegistration,
+                rootTruststorePath,
+                rootTruststorePassword,
+                isVersion,
+                noLocalShell,
+                sshdServer,
+                justGenerateNodeInfo,
+                bootstrapRaftCluster)
     }
 
     fun printHelp(sink: PrintStream) = optionParser.printHelpOn(sink)
@@ -69,6 +85,8 @@ data class CmdLineOptions(val baseDirectory: Path,
                           val loggingLevel: Level,
                           val logToConsole: Boolean,
                           val isRegistration: Boolean,
+                          val rootTruststorePath: Path?,
+                          val rootTruststorePassword: String?,
                           val isVersion: Boolean,
                           val noLocalShell: Boolean,
                           val sshdServer: Boolean,
@@ -78,6 +96,8 @@ data class CmdLineOptions(val baseDirectory: Path,
         val config = ConfigHelper.loadConfig(baseDirectory, configFile).parseAsNodeConfiguration()
         if (isRegistration) {
             requireNotNull(config.compatibilityZoneURL) { "Compatibility Zone Url must be provided in registration mode." }
+            requireNotNull(rootTruststorePassword){ "Network root truststore path must be provided in registration mode." }
+            requireNotNull(rootTruststorePath){ "Network root truststore password must be provided in registration mode." }
         }
         return config
     }

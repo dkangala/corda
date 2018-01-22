@@ -10,6 +10,7 @@ import net.corda.core.crypto.Crypto
 import net.corda.core.crypto.SecureHash
 import net.corda.core.identity.CordaX500Name
 import net.corda.core.internal.createDirectories
+import net.corda.core.internal.div
 import net.corda.core.internal.x500Name
 import net.corda.node.services.config.NodeConfiguration
 import net.corda.nodeapi.internal.crypto.*
@@ -35,10 +36,12 @@ class NetworkRegistrationHelperTest {
     private val nodeLegalName = ALICE_NAME
 
     private lateinit var config: NodeConfiguration
+    private val rootTruststoreName = "network-root-truststore.jks"
 
     @Before
     fun init() {
         val baseDirectory = fs.getPath("/baseDir").createDirectories()
+
         abstract class AbstractNodeConfiguration : NodeConfiguration
         config = rigorousMock<AbstractNodeConfiguration>().also {
             doReturn(baseDirectory).whenever(it).baseDirectory
@@ -158,14 +161,15 @@ class NetworkRegistrationHelperTest {
             doReturn(requestId).whenever(it).submitRequest(any())
             doReturn(response).whenever(it).retrieveCertificates(eq(requestId))
         }
-        return NetworkRegistrationHelper(config, certService)
+        return NetworkRegistrationHelper(config, certService, config.certificatesDirectory / rootTruststoreName, config.trustStorePassword)
     }
 
     private fun saveTrustStoreWithRootCa(rootCert: X509Certificate) {
         config.certificatesDirectory.createDirectories()
-        loadOrCreateKeyStore(config.trustStoreFile, config.trustStorePassword).also {
+        val rootTruststore = config.certificatesDirectory / rootTruststoreName
+        loadOrCreateKeyStore(rootTruststore, config.trustStorePassword).also {
             it.addOrReplaceCertificate(X509Utilities.CORDA_ROOT_CA, rootCert)
-            it.save(config.trustStoreFile, config.trustStorePassword)
+            it.save(rootTruststore, config.trustStorePassword)
         }
     }
 }

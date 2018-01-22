@@ -180,6 +180,7 @@ open class NodeStartup(val args: Array<String>) {
     }
 
     open protected fun registerWithNetwork(cmdlineOptions: CmdLineOptions, conf: NodeConfiguration) {
+        // Null checks for [compatibilityZoneURL], [rootTruststorePath] and [rootTruststorePassword] has been done in [CmdLineOptions.loadConfig]
         val compatibilityZoneURL = conf.compatibilityZoneURL!!
         println()
         println("******************************************************************")
@@ -187,7 +188,7 @@ open class NodeStartup(val args: Array<String>) {
         println("*       Registering as a new participant with Corda network      *")
         println("*                                                                *")
         println("******************************************************************")
-        NetworkRegistrationHelper(conf, HTTPNetworkRegistrationService(compatibilityZoneURL)).buildKeystore()
+        NetworkRegistrationHelper(conf, HTTPNetworkRegistrationService(compatibilityZoneURL), cmdlineOptions.rootTruststorePath!!, cmdlineOptions.rootTruststorePassword!!).buildKeystore()
     }
 
     open protected fun loadConfigFile(cmdlineOptions: CmdLineOptions): NodeConfiguration = cmdlineOptions.loadConfig()

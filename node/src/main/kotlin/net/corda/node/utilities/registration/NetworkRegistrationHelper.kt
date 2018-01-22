@@ -12,6 +12,7 @@ import net.corda.nodeapi.internal.crypto.X509Utilities.CORDA_ROOT_CA
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter
 import org.bouncycastle.util.io.pem.PemObject
 import java.io.StringWriter
+import java.nio.file.Path
 import java.security.KeyPair
 import java.security.KeyStore
 import java.security.cert.Certificate
@@ -21,7 +22,10 @@ import java.security.cert.X509Certificate
  * Helper for managing the node registration process, which checks for any existing certificates and requests them if
  * needed.
  */
-class NetworkRegistrationHelper(private val config: NodeConfiguration, private val certService: NetworkRegistrationService) {
+class NetworkRegistrationHelper(private val config: NodeConfiguration,
+                                private val certService: NetworkRegistrationService,
+                                private val rootTrustStorePath: Path,
+                                private val rootTrustStorePassword: String) {
     private companion object {
         val pollInterval = 10.seconds
         const val SELF_SIGNED_PRIVATE_KEY = "Self Signed Private Key"
@@ -31,18 +35,18 @@ class NetworkRegistrationHelper(private val config: NodeConfiguration, private v
     private val keystorePassword = config.keyStorePassword
     // TODO: Use different password for private key.
     private val privateKeyPassword = config.keyStorePassword
-    private val trustStore: KeyStore
+    private val rootTrustStore: KeyStore
     private val rootCert: X509Certificate
 
     init {
-        require(config.trustStoreFile.exists()) {
-            "${config.trustStoreFile} does not exist. This file must contain the root CA cert of your compatibility zone. " +
+        require(rootTrustStorePath.exists()) {
+            "$rootTrustStorePath does not exist. This file must contain the root CA cert of your compatibility zone. " +
                     "Please contact your CZ operator."
         }
-        trustStore = loadKeyStore(config.trustStoreFile, config.trustStorePassword)
-        val rootCert = trustStore.getCertificate(CORDA_ROOT_CA)
+        rootTrustStore = loadKeyStore(rootTrustStorePath, rootTrustStorePassword)
+        val rootCert = rootTrustStore.getCertificate(CORDA_ROOT_CA)
         require(rootCert != null) {
-            "${config.trustStoreFile} does not contain a certificate with the key $CORDA_ROOT_CA." +
+            "${config.trustStoreFile} does not contain a certificate with alias $CORDA_ROOT_CA." +
                     "This file must contain the root CA cert of your compatibility zone. " +
                     "Please contact your CZ operator."
         }
@@ -74,7 +78,9 @@ class NetworkRegistrationHelper(private val config: NodeConfiguration, private v
             val keyPair = Crypto.generateKeyPair(X509Utilities.DEFAULT_TLS_SIGNATURE_SCHEME)
             val selfSignCert = X509Utilities.createSelfSignedCACertificate(config.myLegalName.x500Principal, keyPair)
             // Save to the key store.
-            nodeKeyStore.addOrReplaceKey(SELF_SIGNED_PRIVATE_KEY, keyPair.private, privateKeyPassword.toCharArray(),
+            nodeKeyStore.addOrReplaceKey(SELF_SIGNED_PRIVATE_KEY,
+                    keyPair.private,
+                    privateKeyPassword.toCharArray(),
                     arrayOf(selfSignCert))
             nodeKeyStore.save(config.nodeKeystore, keystorePassword)
         }
@@ -112,7 +118,7 @@ class NetworkRegistrationHelper(private val config: NodeConfiguration, private v
             throw CertificateRequestException("Received node CA cert has invalid role: $nodeCaCertRole")
         }
 
-        println("Checking root of the  certificate path is what we expect.")
+        // Validate certificate chain returned from the doorman with the root cert obtained via out-of-band process, to prevent MITM attack on doorman server.
         X509Utilities.validateCertificateChain(rootCert, *certificates)
 
         println("Certificate signing request approved, storing private key with the certificate chain.")
@@ -120,6 +126,13 @@ class NetworkRegistrationHelper(private val config: NodeConfiguration, private v
         nodeKeyStore.addOrReplaceKey(CORDA_CLIENT_CA, keyPair.private, privateKeyPassword.toCharArray(), certificates)
         nodeKeyStore.deleteEntry(SELF_SIGNED_PRIVATE_KEY)
         nodeKeyStore.save(config.nodeKeystore, keystorePassword)
+
+        // Save root certificates to trust store.
+        val trustStore = loadOrCreateKeyStore(config.trustStoreFile, config.trustStorePassword)
+        // Assumes certificate chain always starts with client certificate and end with root certificate.
+        trustStore.addOrReplaceCertificate(CORDA_ROOT_CA, certificates.last())
+        trustStore.save(config.trustStoreFile, config.trustStorePassword)
+
         println("Node private key and certificate stored in ${config.nodeKeystore}.")
 
         println("Generating SSL certificate for node messaging service.")
