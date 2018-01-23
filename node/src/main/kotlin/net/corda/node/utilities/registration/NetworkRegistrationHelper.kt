@@ -24,8 +24,8 @@ import java.security.cert.X509Certificate
  */
 class NetworkRegistrationHelper(private val config: NodeConfiguration,
                                 private val certService: NetworkRegistrationService,
-                                private val rootTrustStorePath: Path,
-                                private val rootTrustStorePassword: String) {
+                                networkRootTrustStorePath: Path,
+                                networkRootTruststorePassword: String) {
     private companion object {
         val pollInterval = 10.seconds
         const val SELF_SIGNED_PRIVATE_KEY = "Self Signed Private Key"
@@ -39,11 +39,11 @@ class NetworkRegistrationHelper(private val config: NodeConfiguration,
     private val rootCert: X509Certificate
 
     init {
-        require(rootTrustStorePath.exists()) {
-            "$rootTrustStorePath does not exist. This file must contain the root CA cert of your compatibility zone. " +
+        require(networkRootTrustStorePath.exists()) {
+            "$networkRootTrustStorePath does not exist. This file must contain the root CA cert of your compatibility zone. " +
                     "Please contact your CZ operator."
         }
-        rootTrustStore = loadKeyStore(rootTrustStorePath, rootTrustStorePassword)
+        rootTrustStore = loadKeyStore(networkRootTrustStorePath, networkRootTruststorePassword)
         val rootCert = rootTrustStore.getCertificate(CORDA_ROOT_CA)
         require(rootCert != null) {
             "${config.trustStoreFile} does not contain a certificate with alias $CORDA_ROOT_CA." +
@@ -126,14 +126,14 @@ class NetworkRegistrationHelper(private val config: NodeConfiguration,
         nodeKeyStore.addOrReplaceKey(CORDA_CLIENT_CA, keyPair.private, privateKeyPassword.toCharArray(), certificates)
         nodeKeyStore.deleteEntry(SELF_SIGNED_PRIVATE_KEY)
         nodeKeyStore.save(config.nodeKeystore, keystorePassword)
+        println("Node private key and certificate stored in ${config.nodeKeystore}.")
 
         // Save root certificates to trust store.
         val trustStore = loadOrCreateKeyStore(config.trustStoreFile, config.trustStorePassword)
         // Assumes certificate chain always starts with client certificate and end with root certificate.
         trustStore.addOrReplaceCertificate(CORDA_ROOT_CA, certificates.last())
         trustStore.save(config.trustStoreFile, config.trustStorePassword)
-
-        println("Node private key and certificate stored in ${config.nodeKeystore}.")
+        println("Node trust store stored in ${config.trustStoreFile}.")
 
         println("Generating SSL certificate for node messaging service.")
         val sslKeyPair = Crypto.generateKeyPair(X509Utilities.DEFAULT_TLS_SIGNATURE_SCHEME)

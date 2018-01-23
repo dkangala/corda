@@ -33,9 +33,9 @@ class ArgsParser {
     private val sshdServerArg = optionParser.accepts("sshd", "Enables SSHD server for node administration.")
     private val noLocalShellArg = optionParser.accepts("no-local-shell", "Do not start the embedded shell locally.")
     private val isRegistrationArg = optionParser.accepts("initial-registration", "Start initial node registration with Corda network to obtain certificate from the permissioning server.")
-    private val rootTruststorePath = optionParser.accepts("root-truststore", "Network root truststore obtained from network operator, use for preventing MITM attack during initial registration process.")
+    private val networkRootTruststorePathArg = optionParser.accepts("network-root-truststore", "Network root trust store obtained from network operator.")
             .withRequiredArg()
-    private val rootTruststorePassword = optionParser.accepts("root-truststore-password", "Network root truststore password.")
+    private val networkRootTruststorePasswordArg = optionParser.accepts("network-root-truststore-password", "Network root trust store password obtained from network operator.")
             .withRequiredArg()
     private val isVersionArg = optionParser.accepts("version", "Print the version and exit")
     private val justGenerateNodeInfoArg = optionParser.accepts("just-generate-node-info",
@@ -59,16 +59,16 @@ class ArgsParser {
         val sshdServer = optionSet.has(sshdServerArg)
         val justGenerateNodeInfo = optionSet.has(justGenerateNodeInfoArg)
         val bootstrapRaftCluster = optionSet.has(bootstrapRaftClusterArg)
-        val rootTruststorePath = optionSet.valueOf(rootTruststorePath)?.let { Paths.get(it).normalize().toAbsolutePath() }
-        val rootTruststorePassword = optionSet.valueOf(rootTruststorePassword)
+        val networkRootTruststorePath = optionSet.valueOf(networkRootTruststorePathArg)?.let { Paths.get(it).normalize().toAbsolutePath() }
+        val networkRootTruststorePassword = optionSet.valueOf(networkRootTruststorePasswordArg)
         return CmdLineOptions(baseDirectory,
                 configFile,
                 help,
                 loggingLevel,
                 logToConsole,
                 isRegistration,
-                rootTruststorePath,
-                rootTruststorePassword,
+                networkRootTruststorePath,
+                networkRootTruststorePassword,
                 isVersion,
                 noLocalShell,
                 sshdServer,
@@ -85,8 +85,8 @@ data class CmdLineOptions(val baseDirectory: Path,
                           val loggingLevel: Level,
                           val logToConsole: Boolean,
                           val isRegistration: Boolean,
-                          val rootTruststorePath: Path?,
-                          val rootTruststorePassword: String?,
+                          val networkRootTruststorePath: Path?,
+                          val networkRootTruststorePassword: String?,
                           val isVersion: Boolean,
                           val noLocalShell: Boolean,
                           val sshdServer: Boolean,
@@ -96,8 +96,8 @@ data class CmdLineOptions(val baseDirectory: Path,
         val config = ConfigHelper.loadConfig(baseDirectory, configFile).parseAsNodeConfiguration()
         if (isRegistration) {
             requireNotNull(config.compatibilityZoneURL) { "Compatibility Zone Url must be provided in registration mode." }
-            requireNotNull(rootTruststorePassword){ "Network root truststore path must be provided in registration mode." }
-            requireNotNull(rootTruststorePath){ "Network root truststore password must be provided in registration mode." }
+            requireNotNull(networkRootTruststorePath) { "Network root trust store path must be provided in registration mode." }
+            requireNotNull(networkRootTruststorePassword) { "Network root trust store password must be provided in registration mode." }
         }
         return config
     }

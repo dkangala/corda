@@ -235,9 +235,11 @@ class DriverDSLImpl(
         config.corda.certificatesDirectory.createDirectories()
         // Create network root truststore.
         val rootTruststorePath = config.corda.certificatesDirectory / "network-root-truststore.jks"
-        loadOrCreateKeyStore(rootTruststorePath, config.corda.trustStorePassword).apply {
+        // The network truststore will be provided by the network operator via out-of-band communication.
+        val rootTruststorePassword = "corda-root-password"
+        loadOrCreateKeyStore(rootTruststorePath, rootTruststorePassword).apply {
             addOrReplaceCertificate(X509Utilities.CORDA_ROOT_CA, rootCert)
-            save(rootTruststorePath, config.corda.trustStorePassword)
+            save(rootTruststorePath, rootTruststorePassword)
         }
 
         return if (startNodesInProcess) {
@@ -462,8 +464,8 @@ class DriverDSLImpl(
             when (it.cluster) {
                 null -> startSingleNotary(it, localNetworkMap)
                 is ClusterSpec.Raft,
-                    // DummyCluster is used for testing the notary communication path, and it does not matter
-                    // which underlying consensus algorithm is used, so we just stick to Raft
+                // DummyCluster is used for testing the notary communication path, and it does not matter
+                // which underlying consensus algorithm is used, so we just stick to Raft
                 is DummyClusterSpec -> startRaftNotaryCluster(it, localNetworkMap)
                 else -> throw IllegalArgumentException("BFT-SMaRt not supported")
             }
