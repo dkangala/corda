@@ -128,8 +128,7 @@ class NodeRegistrationTest {
                 portAllocation = portAllocation,
                 compatibilityZone = compatibilityZone,
                 initialiseSerialization = false,
-                notarySpecs = listOf(NotarySpec(notaryName)),
-                startNodesInProcess = true  // We need to run the nodes in the same process so that we can capture the correct exception
+                notarySpecs = listOf(NotarySpec(notaryName))
         ) {
             assertThatThrownBy {
                 defaultNotaryNode.getOrThrow()
