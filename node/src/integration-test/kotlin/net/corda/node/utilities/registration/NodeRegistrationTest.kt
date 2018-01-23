@@ -1,6 +1,5 @@
 package net.corda.node.utilities.registration
 
-import net.corda.core.crypto.Crypto
 import net.corda.core.identity.CordaX500Name
 import net.corda.core.internal.concurrent.transpose
 import net.corda.core.messaging.startFlow
@@ -27,21 +26,21 @@ import net.corda.testing.node.internal.internalDriver
 import net.corda.testing.node.internal.network.NetworkMapServer
 import net.corda.testing.singleIdentity
 import org.assertj.core.api.Assertions.assertThat
-import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.bouncycastle.pkcs.PKCS10CertificationRequest
 import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequest
-import org.junit.*
+import org.junit.After
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.net.URL
 import java.security.KeyPair
 import java.security.cert.CertPath
-import java.security.cert.CertPathValidatorException
 import java.security.cert.Certificate
 import java.security.cert.X509Certificate
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
-import javax.security.auth.x500.X500Principal
 import javax.ws.rs.*
 import javax.ws.rs.core.MediaType
 import javax.ws.rs.core.Response
@@ -114,27 +113,6 @@ class NodeRegistrationTest {
             ).returnValue.getOrThrow()
         }
     }
-
-    @Test
-    fun `node registration wrong root cert`() {
-        val someRootCert = X509Utilities.createSelfSignedCACertificate(
-                X500Principal("CN=Integration Test Corda Node Root CA,O=R3 Ltd,L=London,C=GB"),
-                Crypto.generateKeyPair(X509Utilities.DEFAULT_TLS_SIGNATURE_SCHEME))
-        val compatibilityZone = CompatibilityZoneParams(
-                URL("http://$serverHostAndPort"),
-                publishNotaries = { server.networkParameters = testNetworkParameters(it) },
-                rootCert = someRootCert)
-        internalDriver(
-                portAllocation = portAllocation,
-                compatibilityZone = compatibilityZone,
-                initialiseSerialization = false,
-                notarySpecs = listOf(NotarySpec(notaryName))
-        ) {
-            assertThatThrownBy {
-                defaultNotaryNode.getOrThrow()
-            }.isInstanceOf(CertPathValidatorException::class.java)
-        }
-    }
 }
 
 @Path("certificate")
@@ -184,7 +162,7 @@ class RegistrationHandler(private val rootCertAndKeyPair: CertificateAndKeyPair)
         val name = CordaX500Name.parse(request.subject.toString())
         val nodeCaCert = X509Utilities.createCertificate(
                 CertificateType.NODE_CA,
-                caCertPath[0] as X509Certificate ,
+                caCertPath[0] as X509Certificate,
                 caKeyPair,
                 name.x500Principal,
                 request.publicKey,
