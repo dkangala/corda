@@ -36,7 +36,8 @@ class NetworkRegistrationHelperTest {
     private val nodeLegalName = ALICE_NAME
 
     private lateinit var config: NodeConfiguration
-    private val rootTruststoreName = "network-root-truststore.jks"
+    private val networkRootTrustStoreFileName = "network-root-truststore.jks"
+    private val networkRootTrustStorePassword = "network-root-truststore-password"
 
     @Before
     fun init() {
@@ -161,15 +162,15 @@ class NetworkRegistrationHelperTest {
             doReturn(requestId).whenever(it).submitRequest(any())
             doReturn(response).whenever(it).retrieveCertificates(eq(requestId))
         }
-        return NetworkRegistrationHelper(config, certService, config.certificatesDirectory / rootTruststoreName, config.trustStorePassword)
+        return NetworkRegistrationHelper(config, certService, config.certificatesDirectory / networkRootTrustStoreFileName, networkRootTrustStorePassword)
     }
 
     private fun saveNetworkTrustStore(rootCert: X509Certificate) {
         config.certificatesDirectory.createDirectories()
-        val rootTruststore = config.certificatesDirectory / rootTruststoreName
-        loadOrCreateKeyStore(rootTruststore, config.trustStorePassword).also {
+        val rootTruststore = config.certificatesDirectory / networkRootTrustStoreFileName
+        loadOrCreateKeyStore(rootTruststore, networkRootTrustStorePassword).also {
             it.addOrReplaceCertificate(X509Utilities.CORDA_ROOT_CA, rootCert)
-            it.save(rootTruststore, config.trustStorePassword)
+            it.save(rootTruststore, networkRootTrustStorePassword)
         }
     }
 }
